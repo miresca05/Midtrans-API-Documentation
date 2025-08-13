@@ -244,7 +244,7 @@ ngrok http 80 --host-header=midtrans-api.test
 After running the command, you’ll get a public URL like:
 
 ```
-https://fcxxxxxxx.ngrok-free.app
+https://fc262999bcb5.ngrok-free.app
 ```
 
 
